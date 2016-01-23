@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Locator</title>
+	<link rel="stylesheet" type="text/css" href="/index_style.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+	<script type="text/javascript" src="/socket.io/socket.io.js"></script>
+	<script type="text/javascript">
+
+	function initConnection(name, position) {
+		socket.emit("new_user", {name: name, location: position});
+	}
+
+	function newMarker(name, location) {
+		markers[name] = new google.maps.Marker({
+			position: location,
+			map: map,
+			draggable: false,
+			label: name,
+			animation: google.maps.Animation.DROP,
+			title: name
+		});
+	}
+	</script>
+</head>
+<body>
+<div id="map">
+
+</div>
+<script type="text/javascript">
+var users = {};
+var socket = io.connect();
+var position;
+var map;
+var myMarker;
+var markers = [];
+var name = prompt("What is your name?");
+var pointer = 0;
+function initMap() {
+	var location = {lat: 47.6149942, lng: -122.475988};
+	map = new google.maps.Map(document.getElementById('map'), {
+		center: location,
+		zoom: 11
+	});
+}
+//if location is updated, emit a location update socket event
+var watchID = navigator.geolocation.watchPosition(function(position) {
+	console.log("Updating position");
+	var newLocation = {lat: position.coords.latitude, lng: position.coords.longitude};
+	//emit the socket event
+	socket.emit("updated_location", {newLocation})
+});
+
+if ("geolocation" in navigator) {
+	console.log("Geolocation is supported!");
+	navigator.geolocation.getCurrentPosition(function(position) {
+		var myLatLong = {lat: position.coords.latitude, lng: position.coords.longitude};
+		console.log("Current location:", myLatLong);
+		map.panTo(myLatLong);
+		initConnection(name, myLatLong);
+	});
+} else {
+	console.log("Geolocation is not supported");
+	alert("Geolocation is not supported!");
+}
+//when all users are received, add markers for them all
+
+socket.on("sync_users", function(data) {
+	var updated = false;
+	console.log("Syncing users:", data);
+	var current_ids = Object.keys(users);
+	var new_ids = Object.keys(data);
+	console.log(current_ids, "vs", new_ids);
+	for (i = 0; i < new_ids.length; i++) {
+		if (!current_ids[i] || current_ids[i] != new_ids[i]) {
+			var id_to_add = new_ids[i];
+			console.log("Adding marker for", data[id_to_add]);
+			markers.push(newMarker(data[id_to_add].name, data[id_to_add].location));	
+			updated = true;		
+		}
+	}
+	if (updated) {
+		users = data;
+		console.log("Performed update");		
+	} else {
+		console.log("No update needed");
+	}
+
+});	 
+
+socket.on("new_user_info", function(data) {
+	console.log("New user detected");
+	console.log(data);
+	users[data.id] = {name: data.user_info.name, location: data.user_info.location};
+	markers.push(newMarker(data.user_info.name, data.user_info.location));
+	console.log("Updated users:", users);
+})
+
+
+
+// socket.on("user_moved", function(data) {
+
+// });
+
+</script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAdiRZJr_QAb_GA4d-Hky8cz1_f5xEj4a8&callback=initMap"></script>	
+</body>
+</html>
